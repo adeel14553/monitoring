@@ -1,45 +1,80 @@
-version: '3'
+# Docker Compose file for deploying Loki, Prometheus, and Grafana on the monitoring server
+
+version: '3.8'
+
+networks:
+  monitoring:
+    driver: bridge
 
 volumes:
   prometheus-data:
-    driver: local
-
   grafana-data:
-    driver: local
-
+  loki-data:
 
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.54.1
     container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-    volumes:
-      - /etc/prometheus:/etc/prometheus
-      - prometheus-data:/prometheus
-    restart: unless-stopped
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - monitoring
+    labels:
+      - "environment=production"
 
   grafana:
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana:11.2.0
     container_name: grafana
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=ginger
+    networks:
+      - monitoring
+    labels:
+      - "environment=production"
 
-
-  node_exporter:
-    image: quay.io/prometheus/node-exporter:latest
-    container_name: node_exporter
-    command:
-      - '--path.rootfs=/host'
-    pid: host
+  loki:
+    image: grafana/loki:2.9.10
+    container_name: loki
     restart: unless-stopped
     volumes:
+      - loki-data:/loki
+      - ./loki/config-loki.yml:/etc/loki/config-loki.yml
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/config-loki.yml
+    networks:
+      - monitoring
+    labels:
+      - "environment=production"
+
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
       - '/:/host:ro,rslave'
+    command:
+      - '--path.rootfs=/host'
+    networks:
+      - monitoring
+    labels:
+      - "environment=production"
+
+## Will update this code soon.
   cadvisor:
     # TODO: latest tag is not updated, check latest release https://github.com/google/cadvisor/releases 
     image: gcr.io/cadvisor/cadvisor:v0.45.0     
